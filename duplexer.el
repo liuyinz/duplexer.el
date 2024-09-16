@@ -1,6 +1,6 @@
 ;;; duplexer.el --- Handle conflicts between local minor modes and reuse rules -*- lexical-binding: t -*-
 
-;; Copyright (C) 2022, 2023 liuyinz
+;; Copyright (C) 2022, 2023, 2024 liuyinz
 
 ;; Author: liuyinz <liuyinz95@gmail.com>
 ;; Maintainer: liuyinz <liuyinz95@gmail.com>
@@ -48,9 +48,9 @@ When CALLER is enabled, call CALLEE with ARG.  CALLEE usually
 is a local minor mode, ARG is 1 or -1."
   :type '(alist
           :key-type symbol
-          :value-type '(alist
-                        :key-type function
-                        :value-type (group integer)))
+          :value-type (alist
+                       :key-type function
+                       :value-type (group integer)))
   :group 'duplexer)
 
 (defcustom duplexer-groups nil
@@ -58,9 +58,9 @@ is a local minor mode, ARG is 1 or -1."
 GROUP is a symbol name, RULES is a list of elements (CALLEE ARG)."
   :type '(alist
           :key-type symbol
-          :value-type '(alist
-                        :key-type function
-                        :value-type (group integer sexp)))
+          :value-type (alist
+                       :key-type function
+                       :value-type (group integer sexp)))
   :group 'duplexer)
 
 (defcustom duplexer-fallback-alist
