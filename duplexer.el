@@ -5,7 +5,7 @@
 ;; Author: liuyinz <liuyinz95@gmail.com>
 ;; Maintainer: liuyinz <liuyinz95@gmail.com>
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "26.3"))
+;; Package-Requires: ((emacs "29.1"))
 ;; Keywords: tools
 ;; Homepage: https://github.com/liuyinz/duplexer.el
 
@@ -32,12 +32,12 @@
 
 ;;; Code:
 
-(require 'seq)
-(require 'cl-lib)
 (require 'find-func)
 
+(require 'dash)
+
 (defgroup duplexer nil
-  "Handle conflicting local minor modes."
+  "Handle conflicting local minor modes and likely commands."
   :group 'duplexer)
 
 (defcustom duplexer-alist nil
@@ -98,85 +98,60 @@ mode.  Add these cases here as fallback."
       (insert "\n" str))
     (unless duplexer-quiet (message str))))
 
-(defun duplexer--minor-mode-p (mode)
-  "Return t if MODE is a minor mode."
-  (and (functionp mode)
-       (progn
-         (when (autoloadp (symbol-function mode))
-           (load (cdr (find-function-library mode)) nil t))
-         (or (memq mode minor-mode-list)
-             (memq (alist-get mode duplexer-fallback-alist) minor-mode-list)))))
-
-(defun duplexer--local-minor-mode-p (mode)
-  "Return t if MODE is a local minor mode."
-  (and (duplexer--minor-mode-p mode)
-       (or (local-variable-if-set-p mode)
-           (local-variable-if-set-p (alist-get mode duplexer-fallback-alist)))))
-
 (defun duplexer--callers (&optional restore)
   "Return list of callers of `duplexer-alist'.
 If optional arg RESTORE is non-nil, apply on `duplexer-restore-alist'"
-  (seq-uniq (mapcar #'car (if restore duplexer-restore-alist duplexer-alist))))
+  (let ((-compare-fn #'eq))
+    (->> (if restore duplexer-restore-alist duplexer-alist)
+         (-map #'car)
+         (-uniq))))
 
 (defun duplexer--rules (&optional caller restore)
   "Return list of rules of `duplexer-alist'.
 If optional arg CALLER is non-nil, only return rules related to it.
 If optional arg RESTORE is non-nil, apply on `duplexer-restore-alist'"
-  (seq-uniq (seq-reduce #'append
-                        (mapcar
-                         (if caller (lambda (x) (and (eq caller (car x)) (cdr x)))
-                           #'cdr)
-                         (if restore duplexer-restore-alist duplexer-alist)) nil)))
+  (let ((-compare-fn #'eq))
+    (->> (if restore duplexer-restore-alist duplexer-alist)
+         (--map (if caller (and (eq caller (car it)) (cdr it)) (cdr it)))
+         (-reduce-from #'append nil)
+         (-uniq))))
 
-(defun duplexer--normalize (&optional mode)
-  "Return alist which consists of uniq and legal rules related to MODE.
-MODE is optional argument, if it's nil, return rules of all callers."
-  (cl-loop for caller in (or (and mode (list mode)) (duplexer--callers))
-           when (cl-loop for rule in (duplexer--rules caller)
-                         if (or (alist-get rule duplexer-groups)
-                                (and (consp rule) (list rule)))
-                         append it into extracted
-                         else do (duplexer--message
-                                  caller rule
-                                  "rule cannot found in duplexer groups")
-                         finally return (cl-remove-duplicates
-                                         extracted
-                                         :key #'car :test #'eq :from-end t))
-           collect (cons caller it) into result
-           finally return (reverse result)))
+(defun duplexer--normalize (caller)
+  "Return alist which consists of uniq and legal rules related to CALLER."
+  (let ((-compare-fn (lambda (a b) (eq (car a) (car b)))))
+    (->> (duplexer--rules caller)
+         (--map (or (and (consp it) (list it)) (alist-get it duplexer-groups)))
+         (-flatten-n 1)
+         (-uniq))))
 
 (defun duplexer--apply (caller &optional restore)
   "Apply rules of CALLER in current buffer.
 If RESTORE is non-nil, restore callee modes if exists."
-  (let ((result))
-    (dolist (rule (alist-get caller (if restore
-                                        duplexer-restore-alist
-                                      (duplexer--normalize caller))))
-      (seq-let (callee arg) rule
-        (cond
-         ((not (fboundp callee))
-          (duplexer--message caller rule (format "%s not found" callee)))
-         ((not (duplexer--minor-mode-p callee))
-          (duplexer--message caller rule (format "%s isn't a minor mode" callee)))
-         ((xor (memq callee (cl-union local-minor-modes global-minor-modes))
-               (equal 1 arg))
-          (if restore
+  (->>
+   (or (and restore (alist-get caller duplexer-restore-alist))
+       (duplexer--normalize caller))
+   (--map
+    (-let [(callee arg) it]
+      (cond
+       ((not (fboundp callee))
+        (duplexer--message caller it (format "command %s not found" callee)))
+       ((xor (or (memq callee (-concat local-minor-modes global-minor-modes))
+                 (buffer-local-value (alist-get callee duplexer-fallback-alist)
+                                     (current-buffer)))
+             (equal 1 arg))
+        (if restore
+            (funcall callee arg)
+          ;; avoid conflict rule if setting
+          (let ((conflict (member (list callee (- arg)) (duplexer--rules nil t))))
+            (and conflict (duplexer--message
+                           caller it
+                           (format "rule conflicts and applied by force: %S"
+                                   duplexer-force)))
+            (unless (and conflict (null duplexer-force))
+              ;; same rule in different callers would only be pushed at first time
               (funcall callee arg)
-            ;; avoid conflict rule if setting
-            (let ((conflict (member (list callee (- arg))
-                                    (duplexer--rules nil t))))
-              (unless (and conflict (null duplexer-force))
-                ;; same rule in different callers would only be pushed at first time
-                (funcall callee arg)
-                (push (list callee (- arg)) result)
-                (when (not (duplexer--local-minor-mode-p callee))
-                  (duplexer--message caller rule
-                                     (format "%s isn't local minor mode" callee))))
-              (and conflict
-                   (duplexer--message caller rule
-                                      (format "rule conflicts and applied by force: %S"
-                                              duplexer-force)))))))))
-    (or restore result)))
+              (list callee (- arg)))))))))
+   (-non-nil)))
 
 (defun duplexer--toggle (caller)
   "Cancel or restore other callee modes when toggle CALLER."
@@ -207,10 +182,10 @@ If RESTORE is non-nil, restore callee modes if exists."
 (define-minor-mode duplexer-mode
   "Minor mode to handle conflicts between minor modes."
   :group 'duplexer
-  (let ((cmd (if duplexer-mode #'add-hook #'remove-hook)))
-    (dolist (caller (duplexer--callers))
-      (funcall cmd (intern (concat (symbol-name caller) "-hook"))
-               (apply-partially #'duplexer--toggle caller)))))
+  (--each (duplexer--callers)
+    (funcall (if duplexer-mode #'add-hook #'remove-hook)
+             (intern (concat (symbol-name it) "-hook"))
+             (apply-partially #'duplexer--toggle it))))
 
 (provide 'duplexer)
 ;;; duplexer.el ends here

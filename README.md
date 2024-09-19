@@ -27,9 +27,8 @@ automatically after the CALLER mode disabled.
 
 ### dependencies
 
-- emacs, version >= 26.3
-- cl-lib
-- seq
+- emacs, version >= 29.1
+- dash
 
 ### package
 
@@ -48,7 +47,7 @@ Install with `M-x package-install` <kbd>RET</kbd> `duplexer` from within Emacs.
 
 Every item in `duplexer-alist` is in format of (CALLER . ((CALLEE ARG) GROUP ...)).
 CALLER is a local minor mode.
-CALLEE should be a local minor mode, global minor mode is not recommended. ARG is 1 or -1.
+CALLEE should be a local minor mode. ARG is 1 or -1.
 Instead of list, a symbol GROUP which defined in `duplexer-groups` is allowd either.
 
 - `duplexer-groups`
@@ -116,8 +115,7 @@ Full example:
 `duplexer-mode` is designed for local minor modes, however, there are some cases which
 global-minor-mode must be called.
 
-- Such as `hl-line-mode`, if `global-hl-line-mode` is enable, call `(hl-line-mode -1)` alone would not
-  take effect in current buffer.
+- Such as `hl-line-mode`, if `global-hl-line-mode` is enable, call `(hl-line-mode -1)` alone would not take effect in current buffer.
 - Such as `blink-cursor-mode`, some ui-related modes have no local minor mode at all.
 
 Be careful when calling global minor mode for which will bother other buffers globally.
