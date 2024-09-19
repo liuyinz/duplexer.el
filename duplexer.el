@@ -5,7 +5,7 @@
 ;; Author: liuyinz <liuyinz95@gmail.com>
 ;; Maintainer: liuyinz <liuyinz95@gmail.com>
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "29.1"))
+;; Package-Requires: ((emacs "29.1") (dash "2.19.1"))
 ;; Keywords: tools
 ;; Homepage: https://github.com/liuyinz/duplexer.el
 
@@ -31,8 +31,6 @@
 ;; arguments and restore them automatically after the CALLER mode disabled.
 
 ;;; Code:
-
-(require 'find-func)
 
 (require 'dash)
 
