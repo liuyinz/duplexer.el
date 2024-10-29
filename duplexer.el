@@ -154,7 +154,7 @@ If RESTORE is non-nil, restore callee modes if exists."
 (defun duplexer--toggle (caller)
   "Cancel or restore other callee modes when toggle CALLER."
   (if (memq caller local-minor-modes)
-      (when-let ((rules (duplexer--apply caller)))
+      (when-let* ((rules (duplexer--apply caller)))
         (push (cons caller rules) duplexer-restore-alist))
     (duplexer--apply caller 'restore)
     (setq duplexer-restore-alist (assq-delete-all caller duplexer-restore-alist))))
@@ -164,10 +164,10 @@ If RESTORE is non-nil, restore callee modes if exists."
   "Add new (CALLER . RULES) to `duplexer-alist'."
   (when (delq nil rules)
     (let ((orig (copy-tree duplexer-alist)))
-      (if-let ((record (assq caller duplexer-alist)))
+      (if-let* ((record (assq caller duplexer-alist)))
           (dolist (rule rules)
             (when rule
-              (if-let ((item (assq (car rule) (cdr record))))
+              (if-let* ((item (assq (car rule) (cdr record))))
                   (setcdr item (cdr rule))
                 (push rule (cdr record)))))
         (push (cons caller rules) duplexer-alist))
